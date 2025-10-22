@@ -10,10 +10,13 @@ build/
 # === Binary files ===
 *.out
 *.o
+*/*.o
 *.so
+*/*.so
 *.a
+*/*.a
 *.exe
-
+*/*.exe
 # === IDE / Editor files ===
 .vscode/
 .idea/
