@@ -1,11 +1,11 @@
-#include <gst/gst.h>
+#include "record.h"
 #include <iostream>
 #include <csignal>
 
-GstElement *pipeline = nullptr;
-bool running = true;
+static GstElement *pipeline = nullptr;
+static bool running = true;
 
-// Xử lý Ctrl+C để dừng ghi file .mp4 an toàn
+// Xử lý Ctrl+C cho receiver
 void signal_handler(int) {
     std::cout << "\nStopping receiver and finalizing MP4 file..." << std::endl;
     if (pipeline) {
@@ -14,29 +14,34 @@ void signal_handler(int) {
     running = false;
 }
 
-int main(int argc, char *argv[]) {
+int start_receiver() {
     GstBus *bus;
     GstMessage *msg;
     GError *error = nullptr;
 
-    gst_init(&argc, &argv);
+    // Initialize GStreamer
+    gst_init(NULL, NULL);
     signal(SIGINT, signal_handler);
 
-    // Pipeline nhận và ghi file .mp4
-    const gchar *pipeline_desc =
+    // Pipeline description for receiver
+    gchar *pipeline_desc = g_strdup_printf(
         "mp4mux name=mux faststart=true ! filesink location=video_received.mp4 "
-        "udpsrc port=6000 buffer-size=524288 "
+        "udpsrc port=%d buffer-size=524288 "
         "caps=\"application/x-rtp,media=video,encoding-name=H264,payload=96\" ! "
         "rtpjitterbuffer latency=50 drop-on-latency=true ! rtph264depay ! tee name=vtee "
         "vtee. ! queue ! avdec_h264 ! videoconvert ! autovideosink sync=false async=false "
         "vtee. ! queue ! h264parse ! mux.video_0 "
-        "udpsrc port=6002 buffer-size=262144 "
+        "udpsrc port=%d buffer-size=262144 "
         "caps=\"application/x-rtp,media=audio,encoding-name=OPUS,payload=97\" ! "
         "rtpjitterbuffer latency=30 drop-on-latency=true ! rtpopusdepay ! tee name=atee "
         "atee. ! queue ! opusdec ! audioconvert ! autoaudiosink sync=false async=false "
-        "atee. ! queue ! opusparse ! mux.audio_0";
+        "atee. ! queue ! opusparse ! mux.audio_0",
+        VIDEO_PORT, AUDIO_PORT
+    );
 
     pipeline = gst_parse_launch(pipeline_desc, &error);
+    g_free(pipeline_desc);
+
     if (!pipeline) {
         std::cerr << "Failed to create receiver pipeline: " << error->message << std::endl;
         g_error_free(error);

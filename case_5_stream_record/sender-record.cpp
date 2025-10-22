@@ -1,24 +1,29 @@
-#include <gst/gst.h>
+#include "record.h"
 #include <iostream>
 
-int main(int argc, char *argv[]) {
+int start_sender(const char *remote_ip) {
     GstElement *pipeline;
     GstBus *bus;
     GstMessage *msg;
     GError *error = nullptr;
 
-    gst_init(&argc, &argv);
+    // Initialize GStreamer
+    gst_init(NULL, NULL);
 
-    const gchar *pipeline_desc =
+    // Pipeline description for sender
+    gchar *pipeline_desc = g_strdup_printf(
         "v4l2src device=/dev/video0 do-timestamp=true ! videoconvert ! "
         "x264enc tune=zerolatency bitrate=4000 speed-preset=ultrafast key-int-max=15 ! "
         "rtph264pay pt=96 config-interval=1 ! "
-        "udpsink host=192.168.15.53 port=6000 sync=false async=false "
+        "udpsink host=%s port=%d sync=false async=false "
         "pulsesrc do-timestamp=true ! queue ! audioconvert ! audioresample ! "
         "opusenc frame-size=5 bitrate=128000 ! rtpopuspay pt=97 ! "
-        "udpsink host=192.168.15.53 port=6002 sync=false async=false";
+        "udpsink host=%s port=%d sync=false async=false",
+        remote_ip, VIDEO_PORT, remote_ip, AUDIO_PORT
+    );
 
     pipeline = gst_parse_launch(pipeline_desc, &error);
+    g_free(pipeline_desc);
 
     if (!pipeline) {
         std::cerr << "Failed to create sender pipeline: " << error->message << std::endl;
