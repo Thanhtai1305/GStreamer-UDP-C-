@@ -1,0 +1,30 @@
+cat << 'EOF' > .gitignore
+# === CMake build ===
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+build/
+*/build/
+
+# === Binary files ===
+*.out
+*.o
+*.so
+*.a
+*.exe
+
+# === IDE / Editor files ===
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# === Logs & temp ===
+*.log
+*.tmp
+
+# === System files ===
+.DS_Store
+Thumbs.db
+EOF
