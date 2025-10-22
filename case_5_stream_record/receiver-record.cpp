@@ -14,7 +14,7 @@ void signal_handler(int) {
     running = false;
 }
 
-int start_receiver() {
+int start_receiver_case5() {
     GstBus *bus;
     GstMessage *msg;
     GError *error = nullptr;

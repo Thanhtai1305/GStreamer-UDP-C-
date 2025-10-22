@@ -9,7 +9,7 @@
 #define AUDIO_PORT 6002
 
 // Functions to start sender and receiver pipelines
-int start_sender(const char *remote_ip);
-int start_receiver();
+int start_sender_case5(const char *remote_ip);
+int start_receiver_case5();
 
 #endif // RECORD_H

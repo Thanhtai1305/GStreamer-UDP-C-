@@ -1,7 +1,7 @@
 #include "record.h"
 #include <iostream>
 
-int start_sender(const char *remote_ip) {
+int start_sender_case5(const char *remote_ip) {
     GstElement *pipeline;
     GstBus *bus;
     GstMessage *msg;
