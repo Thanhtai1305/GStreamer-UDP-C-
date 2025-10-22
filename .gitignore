@@ -18,7 +18,6 @@ build/
 *.exe
 */*.exe
 # === IDE / Editor files ===
-.vscode/
 .idea/
 *.swp
 *.swo
