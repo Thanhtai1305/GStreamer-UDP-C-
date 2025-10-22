@@ -1,66 +1,69 @@
-#include <gst/gst.h>
-#include <glib.h>
+#include "case1.h"
+#include <csignal>
 
+static GMainLoop *loop = nullptr;  // Keep main loop in this file
 
-int main (int argc, char *argv[]) {
+// Process Ctrl+C signal
+static void handle_sigint(int) {
+    g_print("\nCtrl+C detected! Stopping receiver...\n");
+    if (loop)
+        g_main_loop_quit(loop);
+}
+
+// Process messages on the bus
+static gboolean bus_call(GstBus *bus, GstMessage *msg, gpointer data) {
+    switch (GST_MESSAGE_TYPE(msg)) {
+        case GST_MESSAGE_ERROR: {
+            GError *err;
+            gchar *debug;
+            gst_message_parse_error(msg, &err, &debug);
+            g_printerr("Error from %s: %s\n", GST_OBJECT_NAME(msg->src), err->message);
+            g_printerr("Debug info: %s\n", debug ? debug : "none");
+            g_clear_error(&err);
+            g_free(debug);
+            break;
+        }
+        case GST_MESSAGE_EOS:
+            g_print("EOS received — keeping receiver alive.\n");
+            break;
+        default:
+            break;
+    }
+    return TRUE;
+}
+
+void start_receiver() {
     GstElement *pipeline;
     GstBus *bus;
-    GstMessage *msg;
     GError *error = NULL;
 
-    // 1. initialize the GStreamer
-    gst_init(&argc, &argv);
+    gst_init(nullptr, nullptr);
 
-    // 2. Build the pipeline from the command line string
-    const gchar *pipeline_str = "udpsrc port=6000 ! application/x-rtp, payload=96 ! rtph264depay ! avdec_h264 ! videoconvert ! autovideosink";
+    const gchar *pipeline_str =
+        "udpsrc port=6000 "
+        "caps=\"application/x-rtp, media=video, encoding-name=H264, payload=96\" "
+        "! rtph264depay ! avdec_h264 ! videoconvert ! autovideosink sync=false";
 
     pipeline = gst_parse_launch(pipeline_str, &error);
-
-    // Check for errors in building the pipeline
     if (!pipeline) {
-        g_printerr("Could not build the pipeline: %s\n", error->message);
+        g_printerr("Could not build pipeline: %s\n", error->message);
         g_error_free(error);
-        return -1;
+        return;
     }
-    
-    // 3. Start running the pipeline
-    gst_element_set_state(pipeline, GST_STATE_PLAYING);
-    g_print("Pipeline Receiver đang chạy...\n");    
 
-    // 4. Wait until error or end of stream (EOS)
-    // Since this is a network stream, it will not end by itself (EOS) unless the sender signals it.
-    // We will run a main loop and handle messages on the bus.
     bus = gst_element_get_bus(pipeline);
-    msg = gst_bus_timed_pop_filtered(bus, GST_CLOCK_TIME_NONE, (GstMessageType)(GST_MESSAGE_ERROR | GST_MESSAGE_EOS));
+    gst_bus_add_watch(bus, bus_call, nullptr);
 
-    // Analyze the message
-    if (msg != NULL) {
-        GError *err;
-        gchar *debug_info;
-        switch (GST_MESSAGE_TYPE(msg)) {
-            case GST_MESSAGE_ERROR:
-                gst_message_parse_error(msg, &err, &debug_info);
-                g_printerr("Error from element %s: %s\n", GST_OBJECT_NAME(msg->src), err->message);
-                g_printerr("Debug info: %s\n", debug_info ? debug_info : "không có");
-                g_clear_error(&err);
-                g_free(debug_info);
-                break;
-            case GST_MESSAGE_EOS:
-                g_print("Reach End-Of-Stream.\n");
-                break;
-            default:
-                // Will not reach here
-                g_printerr("Unexpected message received.\n");
-                break;
-        }
-        gst_message_unref(msg);
-    }
+    gst_element_set_state(pipeline, GST_STATE_PLAYING);
+    g_print("Pipeline Receiver is running (Press Ctrl+C to stop)...\n");
 
-    // 5. Free resources
-    g_print("Stopping pipeline...\n");
-    gst_object_unref(bus);
+    loop = g_main_loop_new(NULL, FALSE);
+    signal(SIGINT, handle_sigint);
+    g_main_loop_run(loop);
+
+    g_print("Cleaning up receiver...\n");
     gst_element_set_state(pipeline, GST_STATE_NULL);
+    gst_object_unref(bus);
     gst_object_unref(pipeline);
-
-    return 0;
+    g_main_loop_unref(loop);
 }
