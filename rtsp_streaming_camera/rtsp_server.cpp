@@ -43,8 +43,8 @@ int main(int argc, char *argv[]) {
     // Gắn server vào main context
     gst_rtsp_server_attach(server, NULL);
 
-    g_print("🎥 RTSP server đang chạy tại: rtsp://192.168.15.53:8554/webcam\n");
-    g_print("📢 Stream gồm cả video + audio\n");
+    g_print("RTSP server đang chạy tại: rtsp://192.168.15.60:8554/webcam\n");
+    g_print("Stream gồm cả video + audio\n");
 
     // Chạy main loop
     g_main_loop_run(loop);
