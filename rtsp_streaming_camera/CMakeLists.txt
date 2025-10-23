@@ -11,8 +11,14 @@ include_directories(${GST_INCLUDE_DIRS})
 link_directories(${GST_LIBRARY_DIRS})
 add_definitions(${GST_CFLAGS_OTHER})
 
+
+# Server
 # Create the executable for the RTSP server
 add_executable(rtsp_server rtsp_server.cpp)
-
-# Link GStreamer libraries to the executable 
 target_link_libraries(rtsp_server PRIVATE ${GST_LIBRARIES})
+
+
+# Client
+# Create the executable for the RTSP client
+add_executable(rtsp_client rtsp_client.cpp)
+target_link_libraries(rtsp_client PRIVATE ${GST_LIBRARIES})
