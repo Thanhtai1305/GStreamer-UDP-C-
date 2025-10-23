@@ -1,50 +1,27 @@
-# ----------------------------------------------------------------------
-# 1. Các file/thư mục tạo ra bởi Build System (CMake/Make)
-# ----------------------------------------------------------------------
-# Thư mục chứa các file build và object binaries
-/build/
-./build
-# Các thư mục/file cache và cấu hình tạm thời của CMake
+# Ignore build directories
+build/
+*/build/
+**/build/
+
+# Ignore CMake generated files
 CMakeCache.txt
 CMakeFiles/
-CTestTestfile.cmake
 cmake_install.cmake
-install_manifest.txt
-# File biên dịch binary cuối cùng
-# (Tên file có thể khác, ví dụ: 'my_app', 'gstreamer_test',...)
-*.exe
+Makefile
+
+# Ignore binaries and object files
 *.o
 *.so
 *.a
-/Debug/
-/Release/
+*.exe
+rtsp_server
 
-# ----------------------------------------------------------------------
-# 2. Các file/thư mục tạo ra bởi IDE/Editor (VS Code)
-# ----------------------------------------------------------------------
-# Thư mục cấu hình và cache của VS Code
+# Ignore editor and OS files
 .vscode/
-
-# Thư mục cache và history của các Editor khác (nếu dùng)
-.history/
-
-# ----------------------------------------------------------------------
-# 3. Các file tạm thời của hệ điều hành và Media
-# ----------------------------------------------------------------------
-# Các file tạo ra bởi macOS
 .DS_Store
-
-# Các file tạm thời của Linux/Unix
 *~
 
-# Các file bản ghi stream/record
-# Loại trừ các file output được tạo ra từ các case của bạn
-/case_*/*.mp4
-/case_*/*.avi
-/case_*/*.log
-
-# ----------------------------------------------------------------------
-# 4. Các thư mục/file cá nhân
-# ----------------------------------------------------------------------
-# Ví dụ: Nếu bạn lưu trữ các file cá nhân hoặc key/password
-# /config/local.ini
+# Ignore generated media/output files
+*.mp4
+*.avi
+*.log
