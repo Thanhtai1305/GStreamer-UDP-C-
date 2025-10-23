@@ -24,14 +24,15 @@ int main(int argc, char *argv[]) {
         - Cả hai encode → gói RTP → ghép thành session RTSP
     */
     gst_rtsp_media_factory_set_launch(factory,
-        "( "
-        "v4l2src device=/dev/video0 ! videoconvert ! "
-        "x264enc tune=zerolatency bitrate=3000 speed-preset=ultrafast ! "
-        "rtph264pay name=pay0 pt=96 "
-        "pulsesrc ! audioconvert ! audioresample ! "
-        "opusenc ! rtpopuspay name=pay1 pt=97 "
-        ")"
+    "( "
+    "v4l2src device=/dev/video0 ! videoconvert ! video/x-raw,format=I420 ! "
+    "x264enc tune=zerolatency bitrate=3000 speed-preset=ultrafast ! "
+    "rtph264pay name=pay0 pt=96 "
+    "pulsesrc ! audioconvert ! audioresample ! "
+    "opusenc ! rtpopuspay name=pay1 pt=97 "
+    ")"
     );
+ 
 
     // Cho phép nhiều client cùng xem
     gst_rtsp_media_factory_set_shared(factory, TRUE);
