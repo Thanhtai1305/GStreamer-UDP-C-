@@ -18,7 +18,7 @@ int main(int argc, char *argv[]) {
     GstRTSPMediaFactory *factory = gst_rtsp_media_factory_new();
 
     /*
-        🧠 Pipeline gồm:
+        Pipeline gồm:
         - Video: từ webcam (/dev/video0)
         - Audio: từ microphone (pulsesrc)
         - Cả hai encode → gói RTP → ghép thành session RTSP
