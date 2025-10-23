@@ -3,7 +3,7 @@
 # ----------------------------------------------------------------------
 # Thư mục chứa các file build và object binaries
 /build/
-
+./build
 # Các thư mục/file cache và cấu hình tạm thời của CMake
 CMakeCache.txt
 CMakeFiles/
