@@ -1,29 +1,33 @@
 cmake_minimum_required(VERSION 3.10)
 project(MAVLink_Encrypted_UDP)
 
-# Thiet lap chuan C++ (C++17)
+# 1. Thiet lap chuan C++ (C++17)
 set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDART_REQUIRED True)
 
-# Tat canh bao "address-of-packed-member" cua MAVLink
+set(CMAKE_CXX_STANDARD_REQUIRED True)
+
+# 2. Tat canh bao "address-of-packed-member"
 add_compile_options(-Wno-address-of-packed-member)
 
-# Tim goi thu vien Libsodium (Tuong duong voi -lsodium)
+# 3. Tim goi thu vien Libsodium
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(SODIUM REQUIRED libsodium)
 
-# Them duong dan include
-# Dau . : thu muc hien tai de code tim thay "mavlink/common/..."
+# 4. Tim goi thu vien Threads/pthread
+find_package(Threads REQUIRED)
+
+# 5. Include directories
 include_directories(.)
 include_directories(${SODIUM_INCLUDE_DIRS})
 
-# Cau hinh file executable cho sender
+
+
+# Cau hinh cho sender
 add_executable(sender sender.cpp)
-# Lien ket thu vien sodium vao sender
-target_link_libraries(sender PRIVATE ${SODIUM_LIBRARIES})
+target_link_libraries(sender PRIVATE ${SODIUM_LIBRARIES} Threads::Threads)
 
 
-# Cau hinh file executable cho receiver
+
+# Cau hinh cho receiver
 add_executable(receiver receiver.cpp)
-#Lien ket thu vien sodium vao receiver
-target_link_libraries(receiver PRIVATE ${SODIUM_LIBRARIES})
+target_link_libraries(receiver PRIVATE ${SODIUM_LIBRARIES} Threads::Threads)

@@ -4,17 +4,13 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <vector>
-
-// Thư viện mã hóa
 #include <sodium.h>
-
-// Thư viện MAVLink
 #include "mavlink/common/mavlink.h"
 
 #define PORT 14550
-#define BUFFER_SIZE 4096 // Tăng lên chút để chứa overhead mã hóa
+#define BUFFER_SIZE 4096
 
-// KHÓA BÍ MẬT (Phải khớp với Sender)
+// KHÓA BÍ MẬT
 const unsigned char MY_KEY[crypto_secretbox_KEYBYTES] = {
     0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
     0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x00,
@@ -22,17 +18,29 @@ const unsigned char MY_KEY[crypto_secretbox_KEYBYTES] = {
     0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x00
 };
 
+// Hàm phụ trợ: Mã hóa và gửi ngược lại cho Sender
+void reply_to_sender(int sockfd, struct sockaddr_in& target_addr, mavlink_message_t& msg) {
+    uint8_t plain_buf[MAVLINK_MAX_PACKET_LEN];
+    uint16_t plain_len = mavlink_msg_to_send_buffer(plain_buf, &msg);
+
+    unsigned char nonce[crypto_secretbox_NONCEBYTES];
+    randombytes_buf(nonce, sizeof nonce);
+
+    std::vector<unsigned char> ciphertext(crypto_secretbox_MACBYTES + plain_len);
+    crypto_secretbox_easy(ciphertext.data(), plain_buf, plain_len, nonce, MY_KEY);
+
+    std::vector<unsigned char> final_packet;
+    final_packet.insert(final_packet.end(), nonce, nonce + sizeof nonce);
+    final_packet.insert(final_packet.end(), ciphertext.begin(), ciphertext.end());
+
+    sendto(sockfd, final_packet.data(), final_packet.size(), 0, 
+           (struct sockaddr *)&target_addr, sizeof(target_addr));
+}
+
 int main() {
-    // 0. Khởi tạo Libsodium
-    if (sodium_init() < 0) {
-        std::cerr << "Khong the khoi tao Libsodium!" << std::endl;
-        return -1;
-    }
+    if (sodium_init() < 0) return -1;
 
-    // 1. Tạo Socket & Bind
     int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sockfd < 0) { perror("Loi tao socket"); return -1; }
-
     struct sockaddr_in my_addr;
     memset(&my_addr, 0, sizeof(my_addr));
     my_addr.sin_family = AF_INET;
@@ -43,68 +51,64 @@ int main() {
         perror("Loi Bind"); return -1;
     }
 
-    std::cout << "[Encrypted Receiver] Dang lang nghe tren cong " << PORT << "..." << std::endl;
+    std::cout << "[Receiver] Dang cho ket noi..." << std::endl;
 
     uint8_t recv_buf[BUFFER_SIZE];
-    struct sockaddr_in src_addr;
+    struct sockaddr_in src_addr; 
     socklen_t addr_len = sizeof(src_addr);
 
     while (true) {
-        // 2. Nhận gói tin mã hóa từ UDP
+        // 1. Nhận tin và LƯU ĐỊA CHỈ NGƯỜI GỬI vào src_addr
         ssize_t recv_len = recvfrom(sockfd, recv_buf, BUFFER_SIZE, 0, 
                                     (struct sockaddr *)&src_addr, &addr_len);
 
-        if (recv_len > 0) {
-            // -----------------------------------------------------------
-            // 3. GIẢI MÃ (Decryption Step)
-            // -----------------------------------------------------------
-            
-            // Kiểm tra độ dài tối thiểu (Nonce + MAC)
-            if (recv_len < crypto_secretbox_NONCEBYTES + crypto_secretbox_MACBYTES) {
-                std::cerr << "Goi tin qua ngan, bo qua!" << std::endl;
+        if (recv_len > crypto_secretbox_NONCEBYTES + crypto_secretbox_MACBYTES) {
+            // 2. Giải mã
+            unsigned char nonce[crypto_secretbox_NONCEBYTES];
+            memcpy(nonce, recv_buf, sizeof nonce);
+            unsigned char* ciphertext = recv_buf + sizeof nonce;
+            unsigned long long ciphertext_len = recv_len - sizeof nonce;
+            std::vector<unsigned char> decrypted(ciphertext_len - crypto_secretbox_MACBYTES);
+
+            if (crypto_secretbox_open_easy(decrypted.data(), ciphertext, ciphertext_len, nonce, MY_KEY) != 0) {
                 continue;
             }
 
-            // a. Tách Nonce (24 bytes đầu)
-            unsigned char nonce[crypto_secretbox_NONCEBYTES];
-            memcpy(nonce, recv_buf, sizeof nonce);
-
-            // b. Tách Ciphertext (Phần còn lại)
-            unsigned char* ciphertext = recv_buf + sizeof nonce;
-            unsigned long long ciphertext_len = recv_len - sizeof nonce;
-
-            // c. Chuẩn bị buffer chứa Plaintext
-            std::vector<unsigned char> decrypted(ciphertext_len - crypto_secretbox_MACBYTES);
-
-            // d. Giải mã
-            if (crypto_secretbox_open_easy(decrypted.data(), ciphertext, ciphertext_len, nonce, MY_KEY) != 0) {
-                std::cerr << "[CANH BAO] Giai ma that bai! Khoa sai hoac tin bi sua doi!" << std::endl;
-                continue; // Bỏ qua gói tin rác này
-            }
-
-            // -----------------------------------------------------------
-            // 4. Parse MAVLink (Làm việc trên dữ liệu đã giải mã 'decrypted')
-            // -----------------------------------------------------------
+            // 3. Parse MAVLink
             mavlink_message_t msg;
             mavlink_status_t status;
-
             for (size_t i = 0; i < decrypted.size(); ++i) {
                 if (mavlink_parse_char(MAVLINK_COMM_0, decrypted[i], &msg, &status)) {
                     
-                    std::cout << "[Receiver] Giai ma OK -> MSG ID: " << (int)msg.msgid;
+                    // --- LOGIC TRẢ LỜI ---
                     
                     if (msg.msgid == MAVLINK_MSG_ID_HEARTBEAT) {
-                        mavlink_heartbeat_t hb;
-                        mavlink_msg_heartbeat_decode(&msg, &hb);
-                        std::cout << " -> Heartbeat (Mode: " << (int)hb.base_mode << ")" << std::endl;
-                    } else {
-                        std::cout << std::endl;
+                        // Nhận được Heartbeat -> Gửi phản hồi ngay
+                        std::cout << "[Receiver] Nhan Heartbeat tu Sender -> Gui lai Heartbeat." << std::endl;
+                        
+                        mavlink_message_t reply_msg;
+                        // ID 255 là Trạm điều khiển
+                        mavlink_msg_heartbeat_pack(255, 0, &reply_msg, MAV_TYPE_GCS, MAV_AUTOPILOT_INVALID, 0, 0, 0);
+                        
+                        reply_to_sender(sockfd, src_addr, reply_msg);
+                    }
+                    else if (msg.msgid == MAVLINK_MSG_ID_STATUSTEXT) {
+                        // Nhận được chuỗi -> In ra và Gửi ACK
+                        mavlink_statustext_t text_msg;
+                        mavlink_msg_statustext_decode(&msg, &text_msg);
+                        
+                        std::cout << "[Receiver] DA NHAN DUOC CHUOI: " << text_msg.text << std::endl;
+                        std::cout << "-> Dang gui ACK xac nhan..." << std::endl;
+
+                        mavlink_message_t ack_msg;
+                        mavlink_msg_command_ack_pack(255, 0, &ack_msg, 0, MAV_RESULT_ACCEPTED, 0, 0, 0, 0);
+                        
+                        reply_to_sender(sockfd, src_addr, ack_msg);
                     }
                 }
             }
         }
     }
-
     close(sockfd);
     return 0;
 }
