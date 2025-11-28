@@ -16,14 +16,14 @@
 #include <signal.h>
 #include <sys/wait.h>
 
-// === BẮT BUỘC: Buộc std::cout in ngay lập tức (fix lỗi log bị treo) ===
+
 static const auto _force_cout_flush = []() {
-    std::cout << std::unitbuf;  // In ngay, không buffer
+    std::cout << std::unitbuf;  // In ngay, khong buffer
     std::cerr << std::unitbuf;
     return 0;
 }();
 
-// Cấu hình mạng
+// Cau hinh mang
 #define QGC_IP "127.0.0.1"
 #define QGC_PORT 14550 
 #define MY_PORT 14540
@@ -33,7 +33,7 @@ static const auto _force_cout_flush = []() {
 #define SYS_ID 1         
 #define COMP_ID_CAMERA 100 
 
-// Commands
+// Macro cho cac commands
 #define MAV_CMD_LEGACY_PHOTO 203 
 #define MAV_CMD_REQUEST_CAMERA_INFORMATION 521
 
@@ -124,11 +124,9 @@ void stop_video_recording() {
     }
 }
 
-// =============================================================================
-// RTSP SERVER FUNCTIONS
-// =============================================================================
+// --- RTSP SERVER FUNCTIONS ---
 
-// Hàm chụp ảnh từ RTSP stream
+// Ham chup anh tu RTSP stream
 void execute_capture(std::string reason) {
     {
         //std::lock_guard<std::mutex> lock(log_mutex);
@@ -140,7 +138,7 @@ void execute_capture(std::string reason) {
     ss << "snapshot_" << now << ".jpg";
     std::string filename = ss.str();
 
-    // Lệnh FFmpeg chụp ảnh từ luồng RTSP
+    // Lenh FFmpeg chup anh tu luong RTSP
     std::string cmd = "ffmpeg -y -analyzeduration 0 -probesize 32 -rtsp_transport tcp -i rtsp://127.0.0.1:" 
                     + std::to_string(RTSP_PORT) + "/webcam -frames:v 1 -q:v 2 " 
                     + filename + " > /dev/null 2>&1";
@@ -155,7 +153,7 @@ void execute_capture(std::string reason) {
     image_count++;
 }
 
-// Thread chạy RTSP server
+// Thread chay RTSP server
 void rtsp_server_thread() {
     gst_init(nullptr, nullptr);
     
@@ -186,9 +184,7 @@ void rtsp_server_thread() {
     g_main_loop_run(loop);
 }
 
-// =============================================================================
-// MAVLINK FUNCTIONS
-// =============================================================================
+// --- MAVLINK FUNCTIONS ---
 
 void setup_udp() {
     sock = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP);
@@ -206,7 +202,7 @@ void setup_udp() {
         exit(1);
     }
     
-    // thiet lap dia chi cho QGC
+    // Thiet lap dia chi cho QGC
     memset(&qgcAddr, 0, sizeof(qgcAddr));
     qgcAddr.sin_family = AF_INET;
     qgcAddr.sin_addr.s_addr = inet_addr(QGC_IP);
@@ -220,12 +216,14 @@ void setup_udp() {
     std::cout << "============================================================" << std::endl;
 }
 
+//Ham gui mavlink
 void send_mavlink(mavlink_message_t* msg) {
     uint8_t buf[MAVLINK_MAX_PACKET_LEN];
     uint16_t len = mavlink_msg_to_send_buffer(buf, msg);
     sendto(sock, buf, len, 0, (struct sockaddr*)&qgcAddr, sizeof(qgcAddr));
 }
 
+// Ham gui Heartbeat
 void send_heartbeat() {
     mavlink_message_t msg;
     mavlink_msg_heartbeat_pack(SYS_ID, COMP_ID_CAMERA, &msg,
@@ -234,6 +232,7 @@ void send_heartbeat() {
     send_mavlink(&msg);
 }
 
+// Ham gui thong tin cua camera
 void send_camera_information() {
     mavlink_message_t msg;
     
@@ -260,6 +259,7 @@ void send_camera_information() {
     std::cout << " [SEND] CAMERA_INFORMATION\n";
 }
 
+// Ham gui cau hinh camera
 void send_camera_settings() {
     mavlink_message_t msg;
     mavlink_msg_camera_settings_pack(
@@ -276,6 +276,7 @@ void send_camera_settings() {
     std::cout << " [SEND] CAMERA_SETTINGS\n";
 }
 
+// Ham gui trang thai chup anh
 void send_camera_capture_status() {
     mavlink_message_t msg;
     
@@ -296,6 +297,7 @@ void send_camera_capture_status() {
     send_mavlink(&msg);
 }
 
+// Ham gui thong tin ve bo nho cho : chup anh, quay video
 void send_storage_information() {
     mavlink_message_t msg;
     mavlink_msg_storage_information_pack(
@@ -312,6 +314,7 @@ void send_storage_information() {
     std::cout << " [SEND] STORAGE_INFORMATION\n";
 }
 
+// Ham gui thong tin cua stream video
 void send_video_stream_information() {
     mavlink_message_t msg;
     
@@ -336,6 +339,7 @@ void send_video_stream_information() {
     std::cout << " [SEND] VIDEO_STREAM_INFORMATION: " << uri << "\n";
 }
 
+// Ham gui ACK xac nhan
 void send_ack(uint16_t command, uint8_t result = MAV_RESULT_ACCEPTED) {
     mavlink_message_t msg;
     mavlink_msg_command_ack_pack(SYS_ID, COMP_ID_CAMERA, &msg, 
@@ -343,6 +347,7 @@ void send_ack(uint16_t command, uint8_t result = MAV_RESULT_ACCEPTED) {
     send_mavlink(&msg);
 }
 
+// Ham gui lenh chup anh
 void send_image_captured() {
     mavlink_message_t msg;
     float q[4] = {1,0,0,0};
@@ -395,10 +400,10 @@ void handle_command_long(mavlink_command_long_t& cmd) {
         std::cout << " -> IMAGE_START_CAPTURE\n";
         send_ack(cmd.command);
         
-        // Chụp ảnh từ RTSP stream trong thread riêng
+        // Chup anh tu RTSP stream trong thread rieng
         std::thread(execute_capture, "QGC Button").detach();
         
-        // Đợi một chút rồi gửi CAMERA_IMAGE_CAPTURED
+        // Delay mot khoang thoi gian roi gui lenh CAMERA_IMAGE_CAPTURED
         usleep(500000);  // 500ms
         send_image_captured();
     }
@@ -456,7 +461,7 @@ void handle_command_long(mavlink_command_long_t& cmd) {
         }
     }
     
-    // Camera Trigger (112) - từ Mission
+    // Camera Trigger (112) - tu Mission
     else if (cmd.command == 112) { //CAMERA_TRIGGER
         std::cout << " -> CAMERA_TRIGGER from Mission\n";
         send_ack(cmd.command);
@@ -480,6 +485,7 @@ void status_loop() {
     std::cout << "[THREAD STATUS] Thread status_loop kết thúc!\n";
 }
 
+// Ham gui heartbeat lien tuc : luon cap nhat trang thai cho phia QGC rang: van con hoat dong
 void heartbeat_loop() {
     int counter = 0;
     while (running) {
@@ -497,57 +503,49 @@ void heartbeat_loop() {
 int main() {
     setup_udp();
 
-    // ===================================================================
-    // 1. Khởi động RTSP server (giữ nguyên – bạn làm đúng!)
-    // ===================================================================
+    // 1. Khoi dong RTSP server
     std::cout << "\n[INIT] Starting RTSP server on port " << RTSP_PORT << "...\n";
     std::thread rtsp_thread(rtsp_server_thread);
     rtsp_thread.detach();
-    sleep(3);  // Đợi RTSP khởi động ổn định
+    sleep(3);  
 
-    // ===================================================================
-    // 2. Gửi thông tin camera NGAY LẬP TỨC (trước khi heartbeat loop)
-    // ===================================================================
+
+    // 2. Gui thong tin camera NGAY LAP TUC (truoc khi heartbeat loop)  
     std::cout << "[INIT] Sending initial CAMERA_INFORMATION + SETTINGS...\n";
-    send_camera_information();      // ← QUAN TRỌNG NHẤT!
+    send_camera_information();      // ← Quan trong nhat
     send_camera_settings();
     send_storage_information();
-    send_video_stream_information();  // ← Cho QGC thấy stream RTSP
+    send_video_stream_information();  // ← Cho QGC thay stream RTSP
 
-    // Gửi vài heartbeat ban đầu để QGC nhận diện comp 100
+    // Gui vai heartbeat ban đau de QGC nhan dien comp 100
     std::cout << "[INIT] Sending initial heartbeats...\n";
     for (int i = 0; i < 8; i++) {
         send_heartbeat();
         usleep(150000);
     }
 
-    // ===================================================================
-    // 3. Khởi động 2 thread nền SIÊU QUAN TRỌNG
-    // ===================================================================
+    // 3. Khoi dong 2 thread nen QUAN TRONG 
     std::cout << "[MAIN] Khởi động thread HEARTBEAT...\n";
-    std::thread hb_thread(heartbeat_loop);      // Gửi heartbeat + broadcast info mỗi 5s
+    std::thread hb_thread(heartbeat_loop);      // Gui heartbeat + broadcast info moi 5s
     std::cout << "[MAIN] Khởi động thread STATUS...\n";
-    std::thread status_thread(status_loop);     // Gửi CAPTURE_STATUS liên tục
+    std::thread status_thread(status_loop);     // Gui CAPTURE_STATUS lien tuc
 
-    // ===================================================================
-    // 4. Thông báo thành công + hướng dẫn người dùng
-    // ===================================================================
+
+    // 4. Thong bao thanh cong + huong dan nguoi dung
     std::cout << "\n" << std::string(60, '=') << std::endl;
-    std::cout << "   MOCK CAMERA + RTSP SIMULATOR ĐÃ HOẠT ĐỘNG 100%!" << std::endl;
+    std::cout << "   MOCK CAMERA + RTSP SIMULATOR DA HOAT DONG 100%!" << std::endl;
     std::cout << std::string(60, '=') << std::endl;
     std::cout << "   Component ID   : " << COMP_ID_CAMERA << " (Camera)" << std::endl;
     std::cout << "   MAVLink Port   : " << MY_PORT << " → " << QGC_PORT << std::endl;
     std::cout << "   RTSP Stream    : rtsp://127.0.0.1:" << RTSP_PORT << "/webcam" << std::endl;
     std::cout << "   XML Server     : http://YOUR_IP:8000/camera_definition.xml" << std::endl;
     std::cout << std::string(60, '=') << std::endl;
-    std::cout << "   Làm ngay:" << std::endl;
-    std::cout << "   1. Chạy: python3 -m http.server 8000" << std::endl;
-    std::cout << "   2. Mở QGC → Click Camera → Thấy Settings + Video → THÀNH CÔNG!" << std::endl;
+    std::cout << "   Lam ngay:" << std::endl;
+    std::cout << "   1. Chay: python3 -m http.server 8000" << std::endl;
+    std::cout << "   2. Mo QGC → Click Camera → Thay Settings + Video → THANH CONG!" << std::endl;
     std::cout << std::string(60, '=') << "\n" << std::endl;
 
-    // ===================================================================
-    // 5. Main loop: nhận lệnh từ QGC
-    // ===================================================================
+    // 5. Main loop: nhan lenh tu QGC
     while (running) {
         uint8_t buf[MAVLINK_MAX_PACKET_LEN];
         struct sockaddr_in src;
@@ -566,7 +564,7 @@ int main() {
                         mavlink_command_long_t cmd;
                         mavlink_msg_command_long_decode(&msg, &cmd);
 
-                        // XỬ LÝ ĐÚNG target_system + target_component
+                        // XU LY DUNG target_system + target_component
                         if ((cmd.target_system == SYS_ID || cmd.target_system == 0) &&
                             (cmd.target_component == COMP_ID_CAMERA || cmd.target_component == 0)) {
                             handle_command_long(cmd);
@@ -585,9 +583,7 @@ int main() {
         usleep(5000);  // ~200Hz loop
     }
 
-    // ===================================================================
-    // 6. Dọn dẹp khi thoát
-    // ===================================================================
+    // 6. Don dep sau khi thoat
     std::cout << "\nShutting down...\n";
     if (ffmpeg_pid > 0) kill(ffmpeg_pid, SIGINT);
     running = false;
