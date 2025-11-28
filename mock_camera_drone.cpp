@@ -13,6 +13,8 @@
 #include <gst/gst.h>
 #include <gst/rtsp-server/rtsp-server.h>
 #include "mavlink/common/mavlink.h"
+#include <signal.h>
+#include <sys/wait.h>
 
 // === BẮT BUỘC: Buộc std::cout in ngay lập tức (fix lỗi log bị treo) ===
 static const auto _force_cout_flush = []() {
@@ -44,8 +46,82 @@ std::atomic<bool> video_recording(false);
 std::atomic<bool> running(true);
 std::mutex log_mutex;
 
+// PID cua process quay video (ffmpeg)
+pid_t ffmpeg_pid = -1;
+
 uint32_t get_time_boot_ms() { 
     return (uint32_t)time(NULL) * 1000; 
+}
+
+// ---VIDEO RECORDING FUNCTIONS---
+
+void start_video_recording() {
+    if (ffmpeg_pid > 0) {
+        std::cout << "[VIDEO] Dang quay do, khong the bat dau moi!\n";
+        return;
+    }
+
+    // Tao ten file dua tren thoi gian 
+    time_t now = time(0);
+    std::stringstream ss;
+    ss << "video_" << now << ".mp4";
+    std::string filename = ss.str();
+
+    std::cout << "[VIDEO] >> BAT DAU QUAY: " << filename << " <<<\n";
+
+    // Fork process de chay ffmpeg nen
+    pid_t pid = fork();
+
+    if (pid == 0) {
+        // CHILLD PROCESS
+        // Lenh: ffmpeg -y -i rtsp://.... -c copy video.mp4
+        // Dung -c copy de chi copy stream va khong encode lai -> nhe cho viec quay video
+
+        int devnull = open("/dev/null", O_WRONLY);
+        dup2(devnull, STDOUT_FILENO);
+        dup2(devnull, STDERR_FILENO);
+        close(devnull);
+
+        std::string rtsp_url = "rtsp://127.0.0.1:" + std::to_string(RTSP_PORT) + "/webcam";
+
+        // Thuc thi ffmpeg
+        execlp("ffmpeg", "ffmpeg", 
+               "-y", 
+               "-i", rtsp_url.c_str(), 
+               "-c", "copy", 
+               filename.c_str(), 
+               NULL);
+
+        // Neu execlp that bai
+        exit(1);
+    } else if (pid > 0) {
+        // PARENT PROCESS
+        ffmpeg_pid = pid; // Luu PID de kill sau khi ket thuc
+        video_recording = true;
+    } else {
+        std::cerr << "[VIDEO] Loi fork process\n";
+    }
+}
+
+
+void stop_video_recording() {
+    if (ffmpeg_pid > 0) {
+        std::cout << "[VIDEO] >> DUNG QUAY VIDEO <<<\n";
+
+        // Gui SIGINT (tuong duong voi Ctrl+C) de ffmpeg dong file mp4 dung chuan
+        // LUU Y: Khong dung SIGKILL vi file se bi loi (corrupt)
+        kill(ffmpeg_pid, SIGINT);
+
+        // Cho process con ket thuc han
+        waitpid(ffmpeg_pid, nullptr, 0);
+
+        ffmpeg_pid = -1;
+        video_recording = false;
+        std::cout << "[VIDEO] FIle da duoc luu an toan.\n";
+    } else {
+        std::cout << "[VIDEO] Khong co video nao dang quay.\n";
+        video_recording = false;
+    }
 }
 
 // =============================================================================
@@ -119,6 +195,7 @@ void setup_udp() {
     int flags = fcntl(sock, F_GETFL, 0);
     fcntl(sock, F_SETFL, flags | O_NONBLOCK);
 
+    // Thiet lap dia chi cua chuong trinh nay
     memset(&myAddr, 0, sizeof(myAddr));
     myAddr.sin_family = AF_INET;
     myAddr.sin_addr.s_addr = INADDR_ANY;
@@ -128,14 +205,15 @@ void setup_udp() {
         perror("Bind error"); 
         exit(1);
     }
-
+    
+    // thiet lap dia chi cho QGC
     memset(&qgcAddr, 0, sizeof(qgcAddr));
     qgcAddr.sin_family = AF_INET;
     qgcAddr.sin_addr.s_addr = inet_addr(QGC_IP);
     qgcAddr.sin_port = htons(QGC_PORT);
    
     std::cout << "============================================================" << std::endl;
-    std::cout << "   CAMERA PROTOCOL V2 + RTSP SIMULATOR" << std::endl;
+    std::cout << "   CAMERA PROTOCOL V2 + RTSP SIMULATOR (CAPTURE + RECORDER)" << std::endl;
     std::cout << "============================================================" << std::endl;
     std::cout << "   MAVLink Port: " << MY_PORT << " -> " << QGC_PORT << std::endl;
     std::cout << "   RTSP Port:    " << RTSP_PORT << std::endl;
@@ -202,7 +280,7 @@ void send_camera_capture_status() {
     mavlink_message_t msg;
     
     uint8_t image_status = 0;  // IDLE
-    uint8_t video_status = video_recording ? 1 : 0;
+    uint8_t video_status = video_recording ? 1 : 0;  // 1 = CAPTURING
     
     mavlink_msg_camera_capture_status_pack(
         SYS_ID, COMP_ID_CAMERA, &msg,
@@ -278,6 +356,7 @@ void send_image_captured() {
     std::cout << " [EVENT] CAMERA_IMAGE_CAPTURED #" << image_count.load() << "\n";
 }
 
+// Ham dam nhiem xu ly lenh cho he thong
 void handle_command_long(mavlink_command_long_t& cmd) {
     //std::lock_guard<std::mutex> lock(log_mutex);
     std::cout << "\n[RECV] Command: " << cmd.command << std::endl;
@@ -333,6 +412,7 @@ void handle_command_long(mavlink_command_long_t& cmd) {
     else if (cmd.command == MAV_CMD_VIDEO_START_CAPTURE) {
         std::cout << " -> VIDEO_START_CAPTURE\n";
         video_recording = true;
+        start_video_recording();
         send_ack(cmd.command);
     }
     
@@ -340,6 +420,7 @@ void handle_command_long(mavlink_command_long_t& cmd) {
     else if (cmd.command == MAV_CMD_VIDEO_STOP_CAPTURE) {
         std::cout << " -> VIDEO_STOP_CAPTURE\n";
         video_recording = false;
+        stop_video_recording();
         send_ack(cmd.command);
     }
     
@@ -376,7 +457,7 @@ void handle_command_long(mavlink_command_long_t& cmd) {
     }
     
     // Camera Trigger (112) - từ Mission
-    else if (cmd.command == 112) {
+    else if (cmd.command == 112) { //CAMERA_TRIGGER
         std::cout << " -> CAMERA_TRIGGER from Mission\n";
         send_ack(cmd.command);
         std::thread(execute_capture, "Mission Trigger").detach();
@@ -508,6 +589,7 @@ int main() {
     // 6. Dọn dẹp khi thoát
     // ===================================================================
     std::cout << "\nShutting down...\n";
+    if (ffmpeg_pid > 0) kill(ffmpeg_pid, SIGINT);
     running = false;
     hb_thread.join();
     status_thread.join();
